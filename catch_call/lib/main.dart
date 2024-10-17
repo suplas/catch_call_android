@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:phone_state/phone_state.dart';
 
@@ -20,31 +21,15 @@ class Example extends StatefulWidget {
 
 class _ExampleState extends State<Example> {
   PhoneStateStatus status = PhoneStateStatus.NOTHING;
+  int permissionCount = 0;
+  bool dialogOpen = false;
+  String dialogContent = "";
   bool granted = false;
-
-  Future<bool> requestPermission() async {
-    var status = await Permission.phone.request();
-    try {
-      switch (status) {
-        case PermissionStatus.denied:
-        case PermissionStatus.restricted:
-        case PermissionStatus.limited:
-        case PermissionStatus.permanentlyDenied:
-          return false;
-        case PermissionStatus.granted:
-          return true;
-        default: return false;
-      } 
-    } catch (e) {
-      print('error');
-      rethrow;
-    }
-  }
 
   @override
   void initState() {
     super.initState();
-    if (Platform.isIOS) setStream();
+    getPermission();
   }
 
   void setStream() {
@@ -57,35 +42,39 @@ class _ExampleState extends State<Example> {
     });
   }
 
+  void getPermission() async {
+    var status = await Permission.phone.request();
+    if(status.isGranted){
+      print('권한 부여');
+      setState(() => setStream());
+    }else if(status.isDenied) {
+      print('권한이 없습니다.');
+      if(permissionCount > 0){
+        Permission.phone.request();
+        setState(() => {permissionCount = 1});
+      }
+      if(Platform.isIOS) exit(0);
+      if(Platform.isAndroid) SystemNavigator.pop();
+
+    }else if(status.isPermanentlyDenied){
+      openAppSettings();
+    }else{
+      if(Platform.isIOS) exit(0);
+      if(Platform.isAndroid) SystemNavigator.pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Phone State"),
-        centerTitle: true,
-      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             if (Platform.isAndroid)
-              MaterialButton(
-                child: const Text("Request permission of Phone"),
-                onPressed: !granted
-                    ? () async {
-                        bool temp = await requestPermission();
-                        setState(() {
-                          granted = temp;
-                          if (granted) {
-                            setStream();
-                          }
-                        });
-                      }
-                    : null,
-              ),
             const Text(
-              "Status of call",
+              "전화 수신",
               style: TextStyle(fontSize: 24),
             ),
             Icon(
@@ -102,7 +91,7 @@ class _ExampleState extends State<Example> {
   IconData getIcons() {
     switch (status) {
       case PhoneStateStatus.NOTHING:
-        return Icons.clear;
+        return Icons.call_end;
       case PhoneStateStatus.CALL_INCOMING:
         return Icons.add_call;
       case PhoneStateStatus.CALL_STARTED:
